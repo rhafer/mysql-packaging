@@ -579,6 +579,14 @@ done
 # Fix libmysqlclient_r.so.18 symlinking to be done against plain .so file
 # and thus broken later on. Fixes bnc#906147
 pushd "%{buildroot}%{_libdir}"
+
+%if "%{extra_provides}" == "mariadb_102"
+# libmysqlclient compatiblity link cmake doesn't create those currently
+# https://jira.mariadb.org/browse/MDEV-12423
+ln -sf libmariadb.so.* lib%{libname}.so.%{soname}.0.0
+ln -sf libmariadb.so.* lib%{libname}.so
+%endif
+
 rm -f lib%{libname}_r.so*
 ln -sf lib%{libname}.so.%{soname}.0.0 lib%{libname}_r.so
 ln -sf lib%{libname}.so.%{soname}.0.0 lib%{libname}_r.so.%{soname}
@@ -620,8 +628,13 @@ mkdir -p '%{buildroot}'/var/lib/mysql-files
 %check
 cd build
 
+%if "%{extra_provides}" != "mariadb_102"
 # First run simple ctest unittests
+# According to https://jira.mariadb.org/browse/MDEV-12470 these test need
+# a running server on 10.2.x  (they are executed as part of the big testsuite
+# below as well)
 LD_LIBRARY_PATH=$(pwd)/unittest/mytap make test %{?_smp_mflags}
+%endif
 
 # And then run discustingly HUGE testsuite that might fail here and there
 # Basically we run it to have overview to check how it goes
@@ -768,13 +781,15 @@ rm -f %{_localstatedir}/adm/update-messages/%{name}-%{version}-%{release}
 %{_libdir}/mysql/plugin/[!d]*.so
 %ghost %{_localstatedir}/adm/update-messages/%{name}-%{version}-%{release}
 %dir %attr(0750, mysql, mysql) /var/lib/mysql-files
-# Pack files for mariadb_101
-%if "%{extra_provides}" == "mariadb_101"
+# Pack files for mariadb_101 and _102
+%if "%{extra_provides}" == "mariadb_101" || "%{extra_provides}" == "mariadb_102"
 %{_bindir}/galera_new_cluster
 %{_bindir}/galera_recovery
 %{_bindir}/mariadb-service-convert
+%if "%{extra_provides}" == "mariadb_101"
 %{_bindir}/mariabackup
 %{_bindir}/mbstream
+%endif
 %dir %{_datadir}/mysql/policy
 %dir %{_datadir}/mysql/policy/apparmor
 %{_datadir}/mysql/policy/apparmor/README
@@ -832,7 +847,7 @@ rm -f %{_localstatedir}/adm/update-messages/%{name}-%{version}-%{release}
 %files test -f mysql-test.files
 %defattr(-, root, root)
 %{_bindir}/my_safe_process
-%if "%{extra_provides}" == "mariadb_101"
+%if "%{extra_provides}" == "mariadb_101" || "%{extra_provides}" == "mariadb_102"
 %{_mandir}/man1/my_safe_process.1*
 %endif
 %{_mandir}/man1/mysql-test-run.pl.1*
